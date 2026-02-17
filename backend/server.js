@@ -21,6 +21,9 @@ app.get("/", (req, res) => {
   res.send("Campus Crisis Radar API Running");
 });
 
+const incidentRoutes = require("./routes/incidentRoutes");
+app.use("/api/incidents", incidentRoutes);
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {

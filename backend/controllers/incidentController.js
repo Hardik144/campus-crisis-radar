@@ -20,11 +20,39 @@ exports.createIncident = async (req, res) => {
 // Get All Incidents
 exports.getIncidents = async (req, res) => {
   try {
-    const incidents = await Incident.find()
-      .populate("reportedBy", "name email role")
-      .sort({ createdAt: -1 });
+    const { page = 1, limit = 10, status, type } = req.query;
 
-    res.json(incidents);
+    let query = {};
+
+    // If student → only their incidents
+    if (req.user.role !== "admin") {
+      query.reportedBy = req.user.id;
+    }
+
+    // Filtering
+    if (status) {
+      query.status = status;
+    }
+
+    if (type) {
+      query.type = type;
+    }
+
+    const incidents = await Incident.find(query)
+      .populate("reportedBy", "name email role")
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Incident.countDocuments(query);
+
+    res.json({
+      total,
+      page: Number(page),
+      pages: Math.ceil(total / limit),
+      incidents
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -1,4 +1,5 @@
 const express = require("express");
+const { incidentValidation } = require("../validators/incidentValidator");
 
 const {
   createIncident,
@@ -10,7 +11,7 @@ const { protect, adminOnly } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-router.post("/", protect, createIncident);
+router.post("/", protect, incidentValidation, createIncident);
 router.get("/", protect, getIncidents);
 router.put("/:id", protect, adminOnly, updateIncidentStatus);
 

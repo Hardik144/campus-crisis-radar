@@ -1,79 +1,88 @@
 const Incident = require("../models/Incident");
+const asyncHandler = require("../utils/asyncHandler");
+const AppError = require("../utils/AppError");
 
-// Create Incident
-exports.createIncident = async (req, res) => {
-  try {
-    const incident = await Incident.create({
-      ...req.body,
-      reportedBy: req.user.id
-    });
+/**
+ * @desc    Create new incident
+ * @route   POST /api/incidents
+ * @access  Private (Student/Admin)
+ */
+exports.createIncident = asyncHandler(async (req, res) => {
+  const incident = await Incident.create({
+    ...req.body,
+    reportedBy: req.user.id
+  });
 
-    res.status(201).json({
-      message: "Incident reported successfully",
+  res.status(201).json({
+    status: "success",
+    data: {
       incident
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    }
+  });
+});
+
+
+/**
+ * @desc    Get incidents (Role-based)
+ * @route   GET /api/incidents
+ * @access  Private
+ */
+exports.getIncidents = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 10, status, type } = req.query;
+
+  let query = {};
+
+  // If user is not admin → only show their incidents
+  if (req.user.role !== "admin") {
+    query.reportedBy = req.user.id;
   }
-};
 
-// Get All Incidents
-exports.getIncidents = async (req, res) => {
-  try {
-    const { page = 1, limit = 10, status, type } = req.query;
+  // Optional filters
+  if (status) query.status = status;
+  if (type) query.type = type;
 
-    let query = {};
+  const incidents = await Incident.find(query)
+    .populate("reportedBy", "name email role")
+    .sort({ createdAt: -1 })
+    .limit(limit * 1)
+    .skip((page - 1) * limit);
 
-    // If student → only their incidents
-    if (req.user.role !== "admin") {
-      query.reportedBy = req.user.id;
-    }
+  const total = await Incident.countDocuments(query);
 
-    // Filtering
-    if (status) {
-      query.status = status;
-    }
-
-    if (type) {
-      query.type = type;
-    }
-
-    const incidents = await Incident.find(query)
-      .populate("reportedBy", "name email role")
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const total = await Incident.countDocuments(query);
-
-    res.json({
-      total,
-      page: Number(page),
-      pages: Math.ceil(total / limit),
+  res.json({
+    status: "success",
+    results: incidents.length,
+    total,
+    page: Number(page),
+    pages: Math.ceil(total / limit),
+    data: {
       incidents
-    });
+    }
+  });
+});
 
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+
+/**
+ * @desc    Update incident status
+ * @route   PUT /api/incidents/:id
+ * @access  Private (Admin only)
+ */
+exports.updateIncidentStatus = asyncHandler(async (req, res) => {
+  const { status } = req.body;
+
+  const incident = await Incident.findById(req.params.id);
+
+  if (!incident) {
+    throw new AppError("Incident not found", 404);
   }
-};
 
-// Update Status (Admin Only Later)
-exports.updateIncidentStatus = async (req, res) => {
-  try {
-    const { status } = req.body;
+  incident.status = status;
+  await incident.save();
 
-    const incident = await Incident.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true }
-    );
-
-    res.json({
-      message: "Incident status updated",
+  res.json({
+    status: "success",
+    data: {
       incident
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+    }
+  });
+});

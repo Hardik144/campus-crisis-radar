@@ -24,6 +24,9 @@ app.get("/", (req, res) => {
 const incidentRoutes = require("./routes/incidentRoutes");
 app.use("/api/incidents", incidentRoutes);
 
+const errorMiddleware = require("./middleware/errorMiddleware");
+app.use(errorMiddleware);
+
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {

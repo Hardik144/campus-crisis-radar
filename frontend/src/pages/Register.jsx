@@ -1,5 +1,5 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../services/api";
 import { useNavigate } from "react-router-dom";
 
 export default function Register() {
@@ -15,9 +15,9 @@ export default function Register() {
     e.preventDefault();
 
     try {
-      await axios.post("http://localhost:5001/api/auth/register", {
+      await api.post("/auth/register", {
         ...form,
-        role: "student"
+        role: "student",
       });
 
       alert("Registered successfully");
@@ -29,7 +29,10 @@ export default function Register() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900">
-      <form onSubmit={handleRegister} className="bg-gray-800 p-8 rounded-xl shadow-lg w-96">
+      <form
+        onSubmit={handleRegister}
+        className="bg-gray-800 p-8 rounded-xl shadow-lg w-96"
+      >
         <h2 className="text-2xl text-white mb-6 text-center">Register</h2>
 
         <input

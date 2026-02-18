@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../services/api";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
@@ -8,9 +8,8 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
-  const { login, user } = useAuth(); // ✅ extract user also
+  const { login, user } = useAuth();
 
-  // 🔁 Auto redirect if already logged in
   useEffect(() => {
     if (user) {
       if (user.role === "admin") {
@@ -25,13 +24,10 @@ export default function Login() {
     e.preventDefault();
 
     try {
-      const res = await axios.post(
-        "http://localhost:5001/api/auth/login",
-        {
-          email,
-          password,
-        }
-      );
+      const res = await api.post("/auth/login", {
+        email,
+        password,
+      });
 
       const { token, user: loggedInUser } = res.data;
 
@@ -44,7 +40,6 @@ export default function Login() {
       } else {
         navigate("/student");
       }
-
     } catch (error) {
       alert(error.response?.data?.message || "Login failed");
     }
@@ -56,9 +51,7 @@ export default function Login() {
         onSubmit={handleLogin}
         className="bg-gray-800 p-8 rounded-xl shadow-lg w-96"
       >
-        <h2 className="text-2xl text-white mb-6 text-center">
-          Login
-        </h2>
+        <h2 className="text-2xl text-white mb-6 text-center">Login</h2>
 
         <input
           type="email"

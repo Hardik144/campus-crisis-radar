@@ -94,7 +94,7 @@ export default function StudentIncidentDetail() {
             {/* Map Card */}
             <div className="bg-white rounded-xl shadow-sm">
 
-              <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-t-xl">
+              <div className="bg-linear-to-r from-blue-600 to-indigo-600 text-white px-6 py-3 rounded-t-xl">
                 Incident Location
               </div>
 

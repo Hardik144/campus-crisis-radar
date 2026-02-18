@@ -7,6 +7,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import StudentEmergency from "./pages/StudentEmergency";
 import StudentReport from "./pages/StudentReport";
 import StudentIncidentDetail from "./pages/StudentIncidentDetail";
+import AdminIncidentDetail from "./pages/AdminIncidentDetail";
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/admin/incidents/:id" element={<AdminIncidentDetail />} />
       </Routes>
     </Router>
   );

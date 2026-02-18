@@ -6,7 +6,7 @@ export default function Navbar({ role }) {
   const navigate = useNavigate();
 
   return (
-    <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-4 flex justify-between items-center shadow-md">
+    <div className="bg-linear-to-r from-blue-600 to-indigo-600 px-8 py-4 flex justify-between items-center shadow-md">
 
       <div>
         <h1 className="text-white font-semibold text-lg">

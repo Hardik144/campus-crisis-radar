@@ -1,18 +1,17 @@
-import { createContext, useContext, useState, useEffect } from "react";
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState } from "react";
 
 const AuthContext = createContext();
 
+function getStoredUser() {
+  const token = localStorage.getItem("token");
+  const role = localStorage.getItem("role");
+
+  return token && role ? { token, role } : null;
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    const role = localStorage.getItem("role");
-
-    if (token && role) {
-      setUser({ token, role });
-    }
-  }, []);
+  const [user, setUser] = useState(getStoredUser);
 
   const login = (token, role) => {
     localStorage.setItem("token", token);

@@ -86,3 +86,32 @@ exports.updateIncidentStatus = asyncHandler(async (req, res) => {
     }
   });
 });
+
+/**
+ * @desc    Get single incident by ID
+ * @route   GET /api/incidents/:id
+ * @access  Private
+ */
+exports.getIncidentById = asyncHandler(async (req, res) => {
+  const incident = await Incident.findById(req.params.id)
+    .populate("reportedBy", "name email role");
+
+  if (!incident) {
+    throw new AppError("Incident not found", 404);
+  }
+
+  // If not admin, make sure student can only see their own incident
+  if (
+    req.user.role !== "admin" &&
+    incident.reportedBy._id.toString() !== req.user.id
+  ) {
+    throw new AppError("Not authorized to access this incident", 403);
+  }
+
+  res.json({
+    status: "success",
+    data: {
+      incident
+    }
+  });
+});

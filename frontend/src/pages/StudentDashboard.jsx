@@ -1,128 +1,89 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 import api from "../services/api";
+import Navbar from "../components/Navbar";
 
 export default function StudentDashboard() {
-  const { logout } = useAuth();
-
+  const navigate = useNavigate();
   const [incidents, setIncidents] = useState([]);
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    type: "Other"
-  });
 
   useEffect(() => {
+    const fetchIncidents = async () => {
+      const res = await api.get("/incidents");
+      setIncidents(res.data.data.incidents);
+    };
+
     fetchIncidents();
   }, []);
 
-  const fetchIncidents = async () => {
-    try {
-      const res = await api.get("/incidents");
-      setIncidents(res.data.data.incidents);
-    } catch (error) {
-      console.error("Failed to fetch incidents", error);
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    try {
-      await api.post("/incidents", form);
-      setForm({ title: "", description: "", type: "Other" });
-      fetchIncidents(); // refresh list
-    } catch (error) {
-      alert(error.response?.data?.message || "Failed to create incident");
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Student Dashboard</h1>
-        <button
-          onClick={logout}
-          className="bg-red-600 px-4 py-2 rounded hover:bg-red-700 transition"
-        >
-          Logout
-        </button>
-      </div>
+    <>
+      <Navbar role="student" />
 
-      {/* Create Incident Form */}
-      <div className="bg-gray-800 p-6 rounded-xl mb-8 shadow-lg">
-        <h2 className="text-xl font-semibold mb-4">
-          Report New Incident
-        </h2>
+      <div className="bg-slate-50 min-h-screen px-12 py-10">
+        {/* Welcome */}
+        <div className="bg-white rounded-xl p-8 shadow-sm mb-8">
+          <h1 className="text-2xl font-semibold mb-2">Welcome Back</h1>
+          <p className="text-slate-500">Stay safe and informed on campus</p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <input
-            type="text"
-            placeholder="Title"
-            className="w-full p-3 rounded bg-gray-700"
-            value={form.title}
-            onChange={(e) =>
-              setForm({ ...form, title: e.target.value })
-            }
-            required
-          />
-
-          <textarea
-            placeholder="Description"
-            className="w-full p-3 rounded bg-gray-700"
-            value={form.description}
-            onChange={(e) =>
-              setForm({ ...form, description: e.target.value })
-            }
-            required
-          />
-
-          <select
-            className="w-full p-3 rounded bg-gray-700"
-            value={form.type}
-            onChange={(e) =>
-              setForm({ ...form, type: e.target.value })
-            }
+        {/* Top Action Cards */}
+        <div className="grid grid-cols-3 gap-6 mb-10">
+          <div
+            onClick={() => navigate("/student/emergency")}
+            className="bg-red-500 text-white p-6 rounded-xl shadow-md cursor-pointer hover:scale-105 transition"
           >
-            <option value="Medical">Medical</option>
-            <option value="Harassment">Harassment</option>
-            <option value="Infrastructure">Infrastructure</option>
-            <option value="Other">Other</option>
-          </select>
+            <h2 className="text-lg font-semibold mb-1">Emergency Alert</h2>
+            <p className="text-red-100">Activate panic button</p>
+          </div>
 
-          <button className="bg-blue-600 px-4 py-2 rounded hover:bg-blue-700 transition">
-            Submit Incident
-          </button>
-        </form>
-      </div>
+          <div
+            onClick={() => navigate("/student/report")}
+            className="bg-white p-6 rounded-xl shadow-md cursor-pointer hover:shadow-lg transition"
+          >
+            <h2 className="text-lg font-semibold mb-1">Report Incident</h2>
+            <p className="text-slate-500">Submit a new report</p>
+          </div>
 
-      {/* Incident List */}
-      <div className="space-y-4">
-        {incidents.length === 0 ? (
-          <p>No incidents reported yet.</p>
-        ) : (
-          incidents.map((incident) => (
+          <div className="bg-white p-6 rounded-xl shadow-md">
+            <h2 className="text-lg font-semibold mb-1">Active Alerts</h2>
+            <p className="text-slate-500">No active emergencies</p>
+          </div>
+        </div>
+
+        {/* Recent Reports */}
+        <h2 className="text-xl font-semibold mb-4">Your Recent Reports</h2>
+
+        <div className="space-y-6">
+          {incidents.map((incident) => (
             <div
               key={incident._id}
-              className="bg-gray-800 p-4 rounded-lg shadow"
+              onClick={() => navigate(`/student/incidents/${incident._id}`)}
+              className="bg-white p-6 rounded-xl shadow-sm flex justify-between items-center cursor-pointer hover:shadow-md transition"
             >
-              <h2 className="text-xl font-semibold">
-                {incident.title}
-              </h2>
-              <p className="text-gray-400">
-                {incident.description}
-              </p>
-              <p className="text-sm mt-2">
-                Status:{" "}
-                <span className="text-blue-400">
-                  {incident.status}
-                </span>
-              </p>
+              <div>
+                <h3 className="font-semibold text-lg">{incident.title}</h3>
+                <p className="text-slate-500">{incident.description}</p>
+                <p className="text-sm text-slate-400 mt-2">
+                  {incident.location?.address}
+                </p>
+              </div>
+
+              <span
+                className={`px-4 py-1 rounded-full text-sm ${
+                  incident.status === "Resolved"
+                    ? "bg-green-100 text-green-700"
+                    : incident.status === "Pending"
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-blue-100 text-blue-700"
+                }`}
+              >
+                {incident.status}
+              </span>
             </div>
-          ))
-        )}
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

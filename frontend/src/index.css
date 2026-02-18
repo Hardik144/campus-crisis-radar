@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+body {
+  @apply bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 min-h-screen text-slate-800;
+}
+
+.glass {
+  @apply bg-white/60 backdrop-blur-xl border border-white/40 shadow-xl;
+}
+
+.glass-soft {
+  @apply bg-white/70 backdrop-blur-lg border border-white/50 shadow-lg;
+}

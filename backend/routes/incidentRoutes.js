@@ -5,7 +5,8 @@ const {
   createIncident,
   getIncidents,
   updateIncidentStatus,
-  getIncidentById
+  getIncidentById,
+  addInvestigationNote
 } = require("../controllers/incidentController");
 
 const { protect, adminOnly } = require("../middleware/authMiddleware");
@@ -14,6 +15,9 @@ const router = express.Router();
 
 router.post("/", protect, incidentValidation, createIncident);
 router.get("/", protect, getIncidents);
+
+router.post("/:id/notes", protect, adminOnly, addInvestigationNote);
+
 router.put("/:id", protect, adminOnly, updateIncidentStatus);
 router.get("/:id", protect, getIncidentById);
 

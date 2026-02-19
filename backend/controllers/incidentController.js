@@ -10,17 +10,16 @@ const AppError = require("../utils/AppError");
 exports.createIncident = asyncHandler(async (req, res) => {
   const incident = await Incident.create({
     ...req.body,
-    reportedBy: req.user.id
+    reportedBy: req.user.id,
   });
 
   res.status(201).json({
     status: "success",
     data: {
-      incident
-    }
+      incident,
+    },
   });
 });
-
 
 /**
  * @desc    Get incidents (Role-based)
@@ -56,11 +55,10 @@ exports.getIncidents = asyncHandler(async (req, res) => {
     page: Number(page),
     pages: Math.ceil(total / limit),
     data: {
-      incidents
-    }
+      incidents,
+    },
   });
 });
-
 
 /**
  * @desc    Update incident status
@@ -82,8 +80,8 @@ exports.updateIncidentStatus = asyncHandler(async (req, res) => {
   res.json({
     status: "success",
     data: {
-      incident
-    }
+      incident,
+    },
   });
 });
 
@@ -94,7 +92,8 @@ exports.updateIncidentStatus = asyncHandler(async (req, res) => {
  */
 exports.getIncidentById = asyncHandler(async (req, res) => {
   const incident = await Incident.findById(req.params.id)
-    .populate("reportedBy", "name email role");
+    .populate("reportedBy", "name email role")
+    .populate("investigationNotes.addedBy", "name role");
 
   if (!incident) {
     throw new AppError("Incident not found", 404);
@@ -111,7 +110,40 @@ exports.getIncidentById = asyncHandler(async (req, res) => {
   res.json({
     status: "success",
     data: {
-      incident
-    }
+      incident,
+    },
+  });
+});
+
+/**
+ * @desc Add investigation note
+ * @route POST /api/incidents/:id/notes
+ * @access Private (Admin only)
+ */
+exports.addInvestigationNote = asyncHandler(async (req, res) => {
+  const { note } = req.body;
+
+  if (!note) {
+    throw new AppError("Note is required", 400);
+  }
+
+  const incident = await Incident.findById(req.params.id);
+
+  if (!incident) {
+    throw new AppError("Incident not found", 404);
+  }
+
+  incident.investigationNotes.push({
+    note,
+    addedBy: req.user.id,
+  });
+
+  await incident.save();
+
+  res.status(201).json({
+    status: "success",
+    data: {
+      incident,
+    },
   });
 });

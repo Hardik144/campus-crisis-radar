@@ -1,24 +1,32 @@
-const express = require("express");
-const { incidentValidation } = require("../validators/incidentValidator");
+const express = require('express');
+const router = express.Router();
 
 const {
   createIncident,
   getIncidents,
-  updateIncidentStatus,
   getIncidentById,
-  addInvestigationNote
-} = require("../controllers/incidentController");
+  updateIncidentStatus,
+  deleteIncident,
+} = require('../controllers/incidentController');
 
-const { protect, adminOnly } = require("../middleware/authMiddleware");
+const { addNote, getNotes } = require('../controllers/noteController');
+const { protect, adminOnly } = require('../middleware/authMiddleware');
 
-const router = express.Router();
+// All routes require authentication
+router.use(protect);
 
-router.post("/", protect, incidentValidation, createIncident);
-router.get("/", protect, getIncidents);
+// @route POST   /api/incidents
+// @route GET    /api/incidents
+router.route('/').post(createIncident).get(getIncidents);
 
-router.post("/:id/notes", protect, adminOnly, addInvestigationNote);
+// @route GET    /api/incidents/:id
+router.route('/:id').get(getIncidentById).delete(adminOnly, deleteIncident);
 
-router.put("/:id", protect, adminOnly, updateIncidentStatus);
-router.get("/:id", protect, getIncidentById);
+// @route PUT    /api/incidents/:id/status  (Admin only)
+router.put('/:id/status', adminOnly, updateIncidentStatus);
+
+// @route POST   /api/incidents/:id/notes  (Admin only)
+// @route GET    /api/incidents/:id/notes
+router.route('/:id/notes').post(adminOnly, addNote).get(getNotes);
 
 module.exports = router;

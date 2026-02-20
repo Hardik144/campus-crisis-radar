@@ -1,149 +1,208 @@
-const Incident = require("../models/Incident");
-const asyncHandler = require("../utils/asyncHandler");
-const AppError = require("../utils/AppError");
+const Incident = require('../models/Incident');
+const InvestigationNote = require('../models/InvestigationNote');
+const asyncHandler = require('../utils/asyncHandler');
+const AppError = require('../utils/AppError');
+const { emitToAdmins } = require('../sockets/socketManager');
 
 /**
- * @desc    Create new incident
+ * @desc    Create a new incident
  * @route   POST /api/incidents
  * @access  Private (Student/Admin)
  */
-exports.createIncident = asyncHandler(async (req, res) => {
+const createIncident = asyncHandler(async (req, res, next) => {
+  const { title, description, type, priority, location, isAnonymous } = req.body;
+
+  if (!title || !description || !type) {
+    return next(new AppError('Title, description, and type are required.', 400));
+  }
+
   const incident = await Incident.create({
-    ...req.body,
-    reportedBy: req.user.id,
+    title: title.trim(),
+    description: description.trim(),
+    type: type.trim(),
+    priority: priority || 'medium',
+    location: location || {},
+    reportedBy: req.user._id,
+    isAnonymous: isAnonymous || false,
+  });
+
+  await incident.populate('reportedBy', 'name email role');
+
+  // Build the response payload - hide reporter if anonymous
+  const incidentData = incident.toObject();
+  if (incidentData.isAnonymous) {
+    incidentData.reportedBy = { name: 'Anonymous', email: null };
+  }
+
+  // Emit realtime event to admins
+  emitToAdmins('new_incident', {
+    type: 'NEW_INCIDENT',
+    incident: incidentData,
+    timestamp: new Date(),
   });
 
   res.status(201).json({
-    status: "success",
-    data: {
-      incident,
-    },
+    success: true,
+    message: 'Incident reported successfully.',
+    incident: incidentData,
   });
 });
 
 /**
- * @desc    Get incidents (Role-based)
+ * @desc    Get incidents
+ *          Admin → all incidents (with optional filters)
+ *          Student → only their own incidents
  * @route   GET /api/incidents
  * @access  Private
  */
-exports.getIncidents = asyncHandler(async (req, res) => {
-  const { page = 1, limit = 10, status, type } = req.query;
+const getIncidents = asyncHandler(async (req, res) => {
+  const { status, priority, type, page = 1, limit = 20 } = req.query;
 
-  let query = {};
+  const filter = {};
 
-  // If user is not admin → only show their incidents
-  if (req.user.role !== "admin") {
-    query.reportedBy = req.user.id;
+  // Students only see their own incidents
+  if (req.user.role === 'student') {
+    filter.reportedBy = req.user._id;
   }
 
-  // Optional filters
-  if (status) query.status = status;
-  if (type) query.type = type;
+  // Apply optional filters
+  if (status) filter.status = status;
+  if (priority) filter.priority = priority;
+  if (type) filter.type = new RegExp(type, 'i');
 
-  const incidents = await Incident.find(query)
-    .populate("reportedBy", "name email role")
+  const skip = (Number(page) - 1) * Number(limit);
+  const total = await Incident.countDocuments(filter);
+
+  const incidents = await Incident.find(filter)
+    .populate('reportedBy', 'name email role')
     .sort({ createdAt: -1 })
-    .limit(limit * 1)
-    .skip((page - 1) * limit);
+    .skip(skip)
+    .limit(Number(limit));
 
-  const total = await Incident.countDocuments(query);
+  // Mask reporter info for anonymous incidents (for non-admin viewers)
+  const sanitized = incidents.map((inc) => {
+    const obj = inc.toObject();
+    if (obj.isAnonymous && req.user.role !== 'admin') {
+      obj.reportedBy = { name: 'Anonymous', email: null };
+    }
+    return obj;
+  });
 
-  res.json({
-    status: "success",
-    results: incidents.length,
+  res.status(200).json({
+    success: true,
     total,
     page: Number(page),
-    pages: Math.ceil(total / limit),
-    data: {
-      incidents,
-    },
+    pages: Math.ceil(total / Number(limit)),
+    count: incidents.length,
+    incidents: sanitized,
+  });
+});
+
+/**
+ * @desc    Get a single incident by ID with notes
+ * @route   GET /api/incidents/:id
+ * @access  Private
+ */
+const getIncidentById = asyncHandler(async (req, res, next) => {
+  const incident = await Incident.findById(req.params.id).populate(
+    'reportedBy',
+    'name email role'
+  );
+
+  if (!incident) {
+    return next(new AppError('Incident not found.', 404));
+  }
+
+  // Students can only see their own incidents
+  if (
+    req.user.role === 'student' &&
+    incident.reportedBy._id.toString() !== req.user._id.toString()
+  ) {
+    return next(new AppError('Not authorized to view this incident.', 403));
+  }
+
+  const notes = await InvestigationNote.find({ incidentId: incident._id })
+    .populate('addedBy', 'name email role')
+    .sort({ createdAt: 1 });
+
+  const incidentData = incident.toObject();
+  if (incidentData.isAnonymous && req.user.role !== 'admin') {
+    incidentData.reportedBy = { name: 'Anonymous', email: null };
+  }
+
+  res.status(200).json({
+    success: true,
+    incident: incidentData,
+    notes,
   });
 });
 
 /**
  * @desc    Update incident status
- * @route   PUT /api/incidents/:id
+ * @route   PUT /api/incidents/:id/status
  * @access  Private (Admin only)
  */
-exports.updateIncidentStatus = asyncHandler(async (req, res) => {
+const updateIncidentStatus = asyncHandler(async (req, res, next) => {
   const { status } = req.body;
+  const validStatuses = ['pending', 'investigating', 'resolved'];
 
-  const incident = await Incident.findById(req.params.id);
-
-  if (!incident) {
-    throw new AppError("Incident not found", 404);
+  if (!status || !validStatuses.includes(status)) {
+    return next(new AppError(`Status must be one of: ${validStatuses.join(', ')}.`, 400));
   }
 
-  incident.status = status;
-  await incident.save();
+  const incident = await Incident.findByIdAndUpdate(
+    req.params.id,
+    { status },
+    { new: true, runValidators: true }
+  ).populate('reportedBy', 'name email role');
 
-  res.json({
-    status: "success",
-    data: {
-      incident,
-    },
+  if (!incident) {
+    return next(new AppError('Incident not found.', 404));
+  }
+
+  // Emit realtime update
+  emitToAdmins('incident_update', {
+    type: 'STATUS_UPDATE',
+    incidentId: incident._id,
+    newStatus: status,
+    updatedBy: { id: req.user._id, name: req.user.name },
+    incident,
+    timestamp: new Date(),
+  });
+
+  res.status(200).json({
+    success: true,
+    message: `Incident status updated to "${status}".`,
+    incident,
   });
 });
 
 /**
- * @desc    Get single incident by ID
- * @route   GET /api/incidents/:id
- * @access  Private
+ * @desc    Delete an incident
+ * @route   DELETE /api/incidents/:id
+ * @access  Private (Admin only)
  */
-exports.getIncidentById = asyncHandler(async (req, res) => {
-  const incident = await Incident.findById(req.params.id)
-    .populate("reportedBy", "name email role")
-    .populate("investigationNotes.addedBy", "name role");
-
-  if (!incident) {
-    throw new AppError("Incident not found", 404);
-  }
-
-  // If not admin, make sure student can only see their own incident
-  if (
-    req.user.role !== "admin" &&
-    incident.reportedBy._id.toString() !== req.user.id
-  ) {
-    throw new AppError("Not authorized to access this incident", 403);
-  }
-
-  res.json({
-    status: "success",
-    data: {
-      incident,
-    },
-  });
-});
-
-/**
- * @desc Add investigation note
- * @route POST /api/incidents/:id/notes
- * @access Private (Admin only)
- */
-exports.addInvestigationNote = asyncHandler(async (req, res) => {
-  const { note } = req.body;
-
-  if (!note) {
-    throw new AppError("Note is required", 400);
-  }
-
+const deleteIncident = asyncHandler(async (req, res, next) => {
   const incident = await Incident.findById(req.params.id);
 
   if (!incident) {
-    throw new AppError("Incident not found", 404);
+    return next(new AppError('Incident not found.', 404));
   }
 
-  incident.investigationNotes.push({
-    note,
-    addedBy: req.user.id,
-  });
+  // Also delete all associated notes
+  await InvestigationNote.deleteMany({ incidentId: incident._id });
+  await incident.deleteOne();
 
-  await incident.save();
-
-  res.status(201).json({
-    status: "success",
-    data: {
-      incident,
-    },
+  res.status(200).json({
+    success: true,
+    message: 'Incident and associated notes deleted successfully.',
   });
 });
+
+module.exports = {
+  createIncident,
+  getIncidents,
+  getIncidentById,
+  updateIncidentStatus,
+  deleteIncident,
+};

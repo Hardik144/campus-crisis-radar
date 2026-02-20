@@ -1,45 +1,58 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import StudentDashboard from "./pages/StudentDashboard";
-import AdminDashboard from "./pages/AdminDashboard";
-import ProtectedRoute from "./components/ProtectedRoute";
-import StudentEmergency from "./pages/StudentEmergency";
-import StudentReport from "./pages/StudentReport";
-import StudentIncidentDetail from "./pages/StudentIncidentDetail";
-import AdminIncidentDetail from "./pages/AdminIncidentDetail";
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
+import AuthLayout from './components/layout/AuthLayout'
+import MainLayout from './components/layout/MainLayout'
+import ProtectedRoute from './components/ui/ProtectedRoute'
 
-function App() {
+import Login from './pages/auth/Login'
+import Register from './pages/auth/Register'
+import StudentDashboard from './pages/student/StudentDashboard'
+import ReportIncident from './pages/student/ReportIncident'
+import PanicPage from './pages/student/PanicPage'
+import AdminDashboard from './pages/admin/AdminDashboard'
+import IncidentDetail from './pages/IncidentDetail'
+
+export default function App() {
   return (
-    <Router>
+    <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-  
-        <Route
-          path="/student"
-          element={
-            <ProtectedRoute role="student">
-              <StudentDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/student/emergency" element={<StudentEmergency />} />
-        <Route path="/student/report" element={<StudentReport />} />
-        <Route path="/student/incidents/:id" element={<StudentIncidentDetail />} />
+        {/* Root redirect */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
 
+        {/* Auth routes */}
+        <Route element={<AuthLayout />}>
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+        </Route>
+
+        {/* Student routes */}
         <Route
-          path="/admin"
           element={
-            <ProtectedRoute role="admin">
-              <AdminDashboard />
+            <ProtectedRoute requiredRole="student">
+              <MainLayout />
             </ProtectedRoute>
           }
-        />
-        <Route path="/admin/incidents/:id" element={<AdminIncidentDetail />} />
+        >
+          <Route path="/student" element={<StudentDashboard />} />
+          <Route path="/student/report" element={<ReportIncident />} />
+          <Route path="/student/panic" element={<PanicPage />} />
+          <Route path="/student/incident/:id" element={<IncidentDetail />} />
+        </Route>
+
+        {/* Admin routes */}
+        <Route
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <MainLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/incident/:id" element={<IncidentDetail />} />
+        </Route>
+
+        {/* 404 fallback */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
-    </Router>
-  );
+    </BrowserRouter>
+  )
 }
-
-export default App;

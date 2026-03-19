@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { Search, ChevronRight, MapPin, User, Activity } from 'lucide-react'
 import { api } from '../../api/api'
-import { socket } from '../../api/socket'
+import { socket, connectSocket } from '../../api/socket'
 import { StatusBadge, PriorityBadge } from '../../components/ui/Badges'
 import { timeAgo } from '../../utils/helpers'
 
@@ -32,6 +32,7 @@ export default function AdminDashboard() {
   }
 
   useEffect(() => {
+    connectSocket()
     socket.emit('join_admin')
 
     socket.on('new_incident', (data) => {
@@ -45,14 +46,32 @@ export default function AdminDashboard() {
     })
 
     socket.on('panic_alert', (data) => {
-      setPanicAlerts(prev => [data, ...prev])
-      setIncidents(prev => [data.incident, ...prev])
+      // Dedup — only add if not already in list
+      setPanicAlerts(prev => {
+        const exists = prev.some(a => a.incidentId === String(data.incidentId))
+        return exists ? prev : [data, ...prev]
+      })
+      setIncidents(prev => {
+        const exists = prev.some(i => i._id === String(data.incidentId))
+        return exists ? prev : [data.incident, ...prev]
+      })
+    })
+
+    socket.on('panic_cancelled', (data) => {
+      // Remove from panic alerts and update incident status
+      setPanicAlerts(prev => prev.filter(a => String(a.incidentId) !== String(data.incidentId)))
+      setIncidents(prev => prev.map(i =>
+        i._id === String(data.incidentId)
+          ? { ...i, status: 'resolved', title: data.title }
+          : i
+      ))
     })
 
     return () => {
       socket.off('new_incident')
       socket.off('incident_update')
       socket.off('panic_alert')
+      socket.off('panic_cancelled')
     }
   }, [])
 

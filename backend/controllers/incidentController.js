@@ -10,10 +10,19 @@ const { emitToAdmins } = require('../sockets/socketManager');
  * @access  Private (Student/Admin)
  */
 const createIncident = asyncHandler(async (req, res, next) => {
-  const { title, description, type, priority, location, isAnonymous } = req.body;
+  const { title, description, type, priority, location, isAnonymous, photo } = req.body
 
   if (!title || !description || !type) {
-    return next(new AppError('Title, description, and type are required.', 400));
+    return next(new AppError('Title, description, and type are required.', 400))
+  }
+
+  let parsedLocation = {}
+  if (location) {
+    try {
+      parsedLocation = typeof location === 'string' ? JSON.parse(location) : location
+    } catch {
+      parsedLocation = { address: location }
+    }
   }
 
   const incident = await Incident.create({
@@ -21,72 +30,69 @@ const createIncident = asyncHandler(async (req, res, next) => {
     description: description.trim(),
     type: type.trim(),
     priority: priority || 'medium',
-    location: location || {},
+    location: parsedLocation,
     reportedBy: req.user._id,
-    isAnonymous: isAnonymous || false,
-  });
+    isAnonymous: isAnonymous === 'true' || isAnonymous === true,
+    photo: photo || null,
+  })
 
-  await incident.populate('reportedBy', 'name email role');
+  await incident.populate('reportedBy', 'name email role')
 
-  // Build the response payload - hide reporter if anonymous
-  const incidentData = incident.toObject();
-  if (incidentData.isAnonymous) {
-    incidentData.reportedBy = { name: 'Anonymous', email: null };
+  const incidentData = incident.toObject()
+
+  // Hide reporter in socket payload if anonymous
+  const socketData = { ...incidentData }
+  if (socketData.isAnonymous) {
+    socketData.reportedBy = { name: 'Anonymous', email: null }
   }
 
-  // Emit realtime event to admins
   emitToAdmins('new_incident', {
     type: 'NEW_INCIDENT',
-    incident: incidentData,
+    incident: socketData,
     timestamp: new Date(),
-  });
+  })
 
   res.status(201).json({
     success: true,
     message: 'Incident reported successfully.',
     incident: incidentData,
-  });
-});
+  })
+})
 
 /**
  * @desc    Get incidents
- *          Admin → all incidents (with optional filters)
- *          Student → only their own incidents
+ *          Admin → all incidents
+ *          Student → only their own
  * @route   GET /api/incidents
  * @access  Private
  */
 const getIncidents = asyncHandler(async (req, res) => {
-  const { status, priority, type, page = 1, limit = 20 } = req.query;
+  const { status, priority, type, page = 1, limit = 20 } = req.query
 
-  const filter = {};
+  const filter = {}
+  if (req.user.role === 'student') filter.reportedBy = req.user._id
+  if (status) filter.status = status
+  if (priority) filter.priority = priority
+  if (type) filter.type = new RegExp(type, 'i')
 
-  // Students only see their own incidents
-  if (req.user.role === 'student') {
-    filter.reportedBy = req.user._id;
-  }
-
-  // Apply optional filters
-  if (status) filter.status = status;
-  if (priority) filter.priority = priority;
-  if (type) filter.type = new RegExp(type, 'i');
-
-  const skip = (Number(page) - 1) * Number(limit);
-  const total = await Incident.countDocuments(filter);
+  const skip = (Number(page) - 1) * Number(limit)
+  const total = await Incident.countDocuments(filter)
 
   const incidents = await Incident.find(filter)
     .populate('reportedBy', 'name email role')
     .sort({ createdAt: -1 })
     .skip(skip)
-    .limit(Number(limit));
+    .limit(Number(limit))
+    .select('-photo') // exclude photo from list view for performance
 
-  // Mask reporter info for anonymous incidents (for non-admin viewers)
+  // Mask reporter for anonymous incidents
   const sanitized = incidents.map((inc) => {
-    const obj = inc.toObject();
-    if (obj.isAnonymous && req.user.role !== 'admin') {
-      obj.reportedBy = { name: 'Anonymous', email: null };
+    const obj = inc.toObject()
+    if (obj.isAnonymous) {
+      obj.reportedBy = { name: 'Anonymous', email: null }
     }
-    return obj;
-  });
+    return obj
+  })
 
   res.status(200).json({
     success: true,
@@ -95,8 +101,8 @@ const getIncidents = asyncHandler(async (req, res) => {
     pages: Math.ceil(total / Number(limit)),
     count: incidents.length,
     incidents: sanitized,
-  });
-});
+  })
+})
 
 /**
  * @desc    Get a single incident by ID with notes
@@ -107,10 +113,10 @@ const getIncidentById = asyncHandler(async (req, res, next) => {
   const incident = await Incident.findById(req.params.id).populate(
     'reportedBy',
     'name email role'
-  );
+  )
 
   if (!incident) {
-    return next(new AppError('Incident not found.', 404));
+    return next(new AppError('Incident not found.', 404))
   }
 
   // Students can only see their own incidents
@@ -118,24 +124,27 @@ const getIncidentById = asyncHandler(async (req, res, next) => {
     req.user.role === 'student' &&
     incident.reportedBy._id.toString() !== req.user._id.toString()
   ) {
-    return next(new AppError('Not authorized to view this incident.', 403));
+    return next(new AppError('Not authorized to view this incident.', 403))
   }
 
   const notes = await InvestigationNote.find({ incidentId: incident._id })
     .populate('addedBy', 'name email role')
-    .sort({ createdAt: 1 });
+    .sort({ createdAt: 1 })
 
-  const incidentData = incident.toObject();
+  const incidentData = incident.toObject()
+
+  // Admin always sees real reporter
+  // Student sees anonymous if flagged
   if (incidentData.isAnonymous && req.user.role !== 'admin') {
-    incidentData.reportedBy = { name: 'Anonymous', email: null };
+    incidentData.reportedBy = { name: 'Anonymous', email: null }
   }
 
   res.status(200).json({
     success: true,
     incident: incidentData,
     notes,
-  });
-});
+  })
+})
 
 /**
  * @desc    Update incident status
@@ -143,24 +152,23 @@ const getIncidentById = asyncHandler(async (req, res, next) => {
  * @access  Private (Admin only)
  */
 const updateIncidentStatus = asyncHandler(async (req, res, next) => {
-  const { status } = req.body;
-  const validStatuses = ['pending', 'investigating', 'resolved'];
+  const { status } = req.body
+  const validStatuses = ['pending', 'investigating', 'resolved']
 
   if (!status || !validStatuses.includes(status)) {
-    return next(new AppError(`Status must be one of: ${validStatuses.join(', ')}.`, 400));
+    return next(new AppError(`Status must be one of: ${validStatuses.join(', ')}.`, 400))
   }
 
   const incident = await Incident.findByIdAndUpdate(
     req.params.id,
     { status },
     { new: true, runValidators: true }
-  ).populate('reportedBy', 'name email role');
+  ).populate('reportedBy', 'name email role')
 
   if (!incident) {
-    return next(new AppError('Incident not found.', 404));
+    return next(new AppError('Incident not found.', 404))
   }
 
-  // Emit realtime update
   emitToAdmins('incident_update', {
     type: 'STATUS_UPDATE',
     incidentId: incident._id,
@@ -168,14 +176,14 @@ const updateIncidentStatus = asyncHandler(async (req, res, next) => {
     updatedBy: { id: req.user._id, name: req.user.name },
     incident,
     timestamp: new Date(),
-  });
+  })
 
   res.status(200).json({
     success: true,
     message: `Incident status updated to "${status}".`,
     incident,
-  });
-});
+  })
+})
 
 /**
  * @desc    Delete an incident
@@ -183,21 +191,20 @@ const updateIncidentStatus = asyncHandler(async (req, res, next) => {
  * @access  Private (Admin only)
  */
 const deleteIncident = asyncHandler(async (req, res, next) => {
-  const incident = await Incident.findById(req.params.id);
+  const incident = await Incident.findById(req.params.id)
 
   if (!incident) {
-    return next(new AppError('Incident not found.', 404));
+    return next(new AppError('Incident not found.', 404))
   }
 
-  // Also delete all associated notes
-  await InvestigationNote.deleteMany({ incidentId: incident._id });
-  await incident.deleteOne();
+  await InvestigationNote.deleteMany({ incidentId: incident._id })
+  await incident.deleteOne()
 
   res.status(200).json({
     success: true,
     message: 'Incident and associated notes deleted successfully.',
-  });
-});
+  })
+})
 
 module.exports = {
   createIncident,
@@ -205,4 +212,4 @@ module.exports = {
   getIncidentById,
   updateIncidentStatus,
   deleteIncident,
-};
+}

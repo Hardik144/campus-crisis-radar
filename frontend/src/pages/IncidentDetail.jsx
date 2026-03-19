@@ -98,7 +98,9 @@ export default function IncidentDetail() {
   }
 
   const locationAddress = incident.location?.address || incident.location || 'Unknown location'
-  const reporterName = incident.isAnonymous && !isAdmin ? 'Anonymous' : incident.reportedBy?.name || 'Unknown'
+  // Always show Anonymous in UI when marked anonymous (admin sees real name via separate admin-only badge)
+  const reporterName = incident.isAnonymous ? 'Anonymous' : incident.reportedBy?.name || 'Unknown'
+  const realName = incident.reportedBy?.name || 'Unknown'
 
   return (
     <div className="p-5 max-w-6xl mx-auto animate-fade_up">
@@ -154,6 +156,66 @@ export default function IncidentDetail() {
               </div>
             </div>
           </div>
+
+          {/* Photo Evidence */}
+          {incident.imageUrl && (
+            <div className="card overflow-hidden">
+              <div className="px-4 py-3 border-b border-radar-border flex items-center justify-between">
+                <div className="text-xs font-mono text-radar-dim tracking-widest uppercase">Photo Evidence</div>
+                <a
+                  href={incident.imageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-mono text-radar-dim hover:text-radar-text transition-colors"
+                >
+                  OPEN FULL ↗
+                </a>
+              </div>
+              <div className="p-3 bg-radar-bg">
+                <img
+                  src={incident.imageUrl}
+                  alt="Incident evidence"
+                  className="w-full rounded object-contain max-h-80"
+                  onError={(e) => {
+                    e.target.parentElement.innerHTML = '<p class="text-xs font-mono text-radar-dim p-4 text-center">Image could not be loaded. <a href="' + incident.imageUrl + '" target="_blank" class="text-radar-red">Open directly ↗</a></p>'
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Photo Evidence */}
+          {incident.photo?.data && (
+            <div className="card overflow-hidden">
+              <div className="px-4 py-3 border-b border-radar-border">
+                <div className="text-xs font-mono text-radar-dim tracking-widest uppercase">Photo Evidence</div>
+              </div>
+              <div className="p-3">
+                <img
+                  src={`data:${incident.photo.contentType};base64,${incident.photo.data}`}
+                  alt="Incident evidence"
+                  className="w-full rounded object-cover max-h-72"
+                />
+                <p className="text-[10px] font-mono text-radar-dim mt-2">{incident.photo.filename}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Photo Evidence */}
+          {incident.photo && (
+            <div className="card overflow-hidden">
+              <div className="px-4 py-3 border-b border-radar-border">
+                <div className="text-xs font-mono text-radar-dim tracking-widest uppercase">Photo Evidence</div>
+              </div>
+              <div className="p-3">
+                <img
+                  src={incident.photo}
+                  alt="Incident evidence"
+                  className="w-full rounded object-contain max-h-80 bg-radar-bg"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Real Map */}
           <div className="card overflow-hidden">
@@ -309,6 +371,11 @@ export default function IncidentDetail() {
               <div>
                 <div className="text-sm font-body font-medium text-radar-text">{reporterName}</div>
                 <div className="text-xs font-mono text-radar-dim">Student</div>
+                {isAdmin && incident.isAnonymous && (
+                  <div className="text-xs font-mono text-amber-400 mt-0.5">
+                    Real: {realName}
+                  </div>
+                )}
               </div>
             </div>
             {incident.isAnonymous && (

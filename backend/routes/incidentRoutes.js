@@ -11,13 +11,14 @@ const {
 
 const { addNote, getNotes } = require('../controllers/noteController');
 const { protect, adminOnly } = require('../middleware/authMiddleware');
+const upload = require('../middleware/upload');
 
 // All routes require authentication
 router.use(protect);
 
 // @route POST   /api/incidents
 // @route GET    /api/incidents
-router.route('/').post(createIncident).get(getIncidents);
+router.route('/').post(upload.single('image'), createIncident).get(getIncidents);
 
 // @route GET    /api/incidents/:id
 router.route('/:id').get(getIncidentById).delete(adminOnly, deleteIncident);

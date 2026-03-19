@@ -10,7 +10,7 @@ const { emitToAdmins } = require('../sockets/socketManager');
  * @access  Private (Student/Admin)
  */
 const createIncident = asyncHandler(async (req, res, next) => {
-  const { title, description, type, priority, location, isAnonymous, photo } = req.body
+  const { title, description, type, priority, location, isAnonymous } = req.body
 
   if (!title || !description || !type) {
     return next(new AppError('Title, description, and type are required.', 400))
@@ -25,6 +25,12 @@ const createIncident = asyncHandler(async (req, res, next) => {
     }
   }
 
+  // Cloudinary stores the URL in req.file.path
+  let imageUrl = null
+  if (req.file) {
+    imageUrl = req.file.path
+  }
+
   const incident = await Incident.create({
     title: title.trim(),
     description: description.trim(),
@@ -33,14 +39,13 @@ const createIncident = asyncHandler(async (req, res, next) => {
     location: parsedLocation,
     reportedBy: req.user._id,
     isAnonymous: isAnonymous === 'true' || isAnonymous === true,
-    photo: photo || null,
+    imageUrl,
   })
 
   await incident.populate('reportedBy', 'name email role')
 
   const incidentData = incident.toObject()
 
-  // Hide reporter in socket payload if anonymous
   const socketData = { ...incidentData }
   if (socketData.isAnonymous) {
     socketData.reportedBy = { name: 'Anonymous', email: null }
@@ -61,8 +66,6 @@ const createIncident = asyncHandler(async (req, res, next) => {
 
 /**
  * @desc    Get incidents
- *          Admin → all incidents
- *          Student → only their own
  * @route   GET /api/incidents
  * @access  Private
  */
@@ -83,12 +86,10 @@ const getIncidents = asyncHandler(async (req, res) => {
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(Number(limit))
-    .select('-photo') // exclude photo from list view for performance
 
-  // Mask reporter for anonymous incidents
   const sanitized = incidents.map((inc) => {
     const obj = inc.toObject()
-    if (obj.isAnonymous) {
+    if (obj.isAnonymous && req.user.role !== 'admin') {
       obj.reportedBy = { name: 'Anonymous', email: null }
     }
     return obj
@@ -119,7 +120,6 @@ const getIncidentById = asyncHandler(async (req, res, next) => {
     return next(new AppError('Incident not found.', 404))
   }
 
-  // Students can only see their own incidents
   if (
     req.user.role === 'student' &&
     incident.reportedBy._id.toString() !== req.user._id.toString()
@@ -133,8 +133,6 @@ const getIncidentById = asyncHandler(async (req, res, next) => {
 
   const incidentData = incident.toObject()
 
-  // Admin always sees real reporter
-  // Student sees anonymous if flagged
   if (incidentData.isAnonymous && req.user.role !== 'admin') {
     incidentData.reportedBy = { name: 'Anonymous', email: null }
   }
